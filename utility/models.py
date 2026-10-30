@@ -136,10 +136,10 @@ class Invoice(models.Model):
     )
 
     class Status(models.TextChoices):
-        UNPAID = "unpaid", "Неоплачено"
-        PARTIALLY_PAID = "partially_paid", "Частково оплачено"
-        PAID = "paid", "Оплачено"
-        OVERDUE = "overdue", "Протерміновано"
+        UNPAID = "unpaid", "Неоплачено"  # noqa E501
+        PARTIALLY_PAID = "partially_paid", "Частково оплачено" # noqa E501
+        PAID = "paid", "Оплачено" # noqa E501
+        OVERDUE = "overdue", "Протерміновано" # noqa E501
 
     status = models.CharField(
         max_length=20,

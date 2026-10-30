@@ -11,6 +11,7 @@ from .views import (
     ProviderViewSet,
     ServiceAccountViewSet,
     TariffViewSet,
+    PaymentViewSet
 )
 
 router = DefaultRouter()
@@ -23,6 +24,7 @@ router.register(r"categories", CategoryViewSet, basename="category")
 router.register(r"tariffs", TariffViewSet, basename="tariff")
 router.register(r"benefits", BenefitViewSet, basename="benefit")
 router.register(r"invoices", InvoiceViewSet, basename="invoice")
+router.register(r"payments", PaymentViewSet, basename="payment")
 
 # 2. Об'єднання маршрутів API та сторінок документації
 urlpatterns = [

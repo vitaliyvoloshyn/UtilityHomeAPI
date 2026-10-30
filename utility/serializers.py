@@ -12,7 +12,7 @@ from .models import (
     Property,
     Provider,
     ServiceAccount,
-    Tariff,
+    Tariff, Payment,
 )
 
 
@@ -411,3 +411,11 @@ class UpdateTariffRateSerializer(serializers.Serializer):
         max_digits=10, decimal_places=2, label="Нова ціна за одиницю"
     )
     effective_from = serializers.DateField(label="Дата, з якої діє нова ціна")
+
+class PaymentSerializer(serializers.ModelSerializer):
+    account_details = ServiceAccountSerializer(source='account')
+    class Meta:
+        model=Payment
+        fields=('account', 'amount', 'created_at', 'account_details')
+
+

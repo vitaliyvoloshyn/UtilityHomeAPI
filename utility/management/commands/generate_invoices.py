@@ -11,5 +11,5 @@ class Command(BaseCommand):
         try:
             BillingService.generate_monthly_invoices()
             self.stdout.write(self.style.SUCCESS("Рахунки успішно згенеровано!"))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             self.stdout.write(self.style.ERROR(f"Помилка при генерації: {e}"))

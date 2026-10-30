@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+from django_filters import rest_framework as filters
 
 from django.db import transaction
 from django.db.models import Q
@@ -7,6 +8,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import LimitOffsetPagination
 from rest_framework.permissions import (
     IsAdminUser,
     IsAuthenticated,
@@ -24,7 +26,7 @@ from .models import (
     Provider,
     ServiceAccount,
     ServiceAccountRecalculation,
-    Tariff,
+    Tariff, Payment,
 )
 from .serializers import (
     BenefitSerializer,
@@ -38,7 +40,7 @@ from .serializers import (
     ServiceAccountSerializer,
     TariffSerializer,
     TopUpSerializer,
-    UpdateTariffRateSerializer,
+    UpdateTariffRateSerializer, PaymentSerializer,
 )
 from .services import BillingService
 
@@ -104,7 +106,8 @@ class ServiceAccountViewSet(viewsets.ModelViewSet):
         url_path="top-up",
     )
     def top_up(self, request, pk=None):
-        """POST /api/service-accounts/{id}/top-up/"""
+        """Поповнення особового рахунка
+        POST /api/service-accounts/{id}/top-up/"""
         account = self.get_object()
         amount_str = request.data.get("amount")
 
@@ -163,7 +166,7 @@ class ServiceAccountViewSet(viewsets.ModelViewSet):
     )
     def recalculate(self, request, pk=None):
         """
-        POST /api/service-accounts/{id}/recalculate/
+        POST /api/accounts/{id}/recalculate/
         Створює запис корекції, який автоматично спишеться/донарахується в найближчому білінгу.
         """
         account = self.get_object()
@@ -362,16 +365,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     filter_backends = (DjangoFilterBackend,)
 
     def get_queryset(self):  # type: ignore
-        # Для безпеки: звичайний користувач бачить лише свої інвойси.
-        # Якщо це адмін, який видаляє інвойси через API, даємо доступ до всіх.
         if self.request.user.is_staff:
             queryset = Invoice.objects.all()
         else:
             queryset = Invoice.objects.filter(account__property__user=self.request.user)
 
+        # Обов'язково додаємо .order_by("-id") або "-created_at",
+        # щоб "останні" інвойси завжди йшли першими у списку
         queryset = (
             queryset.select_related("account__provider")
             .prefetch_related("items__tariff__meter")
+            .order_by("-billing_period")
             .distinct()
         )
 
@@ -385,6 +389,22 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             filters &= Q(status__in=statuses)
 
         return queryset.filter(filters)
+
+    def filter_queryset(self, queryset):
+        """Додаткове обмеження кількості після застосування всіх фільтрів."""
+        queryset = super().filter_queryset(queryset)
+
+        # Перевіряємо, чи передано параметр для отримання останніх 12 записів
+        # Наприклад: /api/invoices/?limit_twelve=true
+        limit_twelve = self.request.query_params.get("limit_twelve")  # type: ignore
+
+        if limit_twelve == "true":
+            # Беремо ID перших 12 елементів (оскільки сортування від нових до старих вже є)
+            # Використовуємо подвійний запит через values_list, щоб обійти обмеження distinct() + slice
+            top_12_ids = queryset.values_list("id", flat=True)[:12]
+            queryset = queryset.filter(id__in=list(top_12_ids))
+
+        return queryset
 
     # 2. НОВИЙ МЕТОД ДЛЯ ВИДАЛЕННЯ (DELETE /api/invoices/{id}/)
     def destroy(self, request, *args, **kwargs):
@@ -446,8 +466,6 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             # Огортаємо видалення та створення в одну транзакцію
             with transaction.atomic():
                 # 2. Видаляємо інвойс.
-                # УВАГА: Якщо ви підключили Django Сигнали (post_delete),
-                # цей виклик автоматично поверне суму на баланс рахунку та активує перерахунки.
                 current_invoice.delete()
                 account.refresh_from_db()
 
@@ -469,3 +487,23 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+
+class PaymentFilter(filters.FilterSet):
+    property_id = filters.NumberFilter(field_name="account__property_id")
+    account_id = filters.NumberFilter(field_name="account_id")#можна і не вказувати,
+
+    class Meta:
+        model = Payment
+        fields = ['account_id', 'property_id']
+
+
+class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = PaymentSerializer
+    filter_backends = (DjangoFilterBackend,)  # вмикаємо фільтр по параметрам в url
+    filterset_class = PaymentFilter  # вказуємо перелік параметрів в url ".../payments/?account_id=1
+    pagination_class = LimitOffsetPagination
+
+    def get_queryset(self):
+        queryset = Payment.objects.filter(account__property__user=self.request.user)
+        return queryset

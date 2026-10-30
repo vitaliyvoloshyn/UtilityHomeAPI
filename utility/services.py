@@ -22,7 +22,7 @@ class BillingService:
         Сканує систему, знаходить пропущені періоди для кожного особового рахунку
         і послідовно генерує всі відсутні рахунки, враховуючи активні пільги.
         """
-        today = date.today()  # noqa: DTZ011
+        today = date.today()
         current_month_start = today.replace(day=1)
         accounts = ServiceAccount.objects.all()
 
