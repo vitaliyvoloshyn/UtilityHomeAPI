@@ -9,10 +9,11 @@ from .models import (
     InvoiceItem,
     Meter,
     MeterReading,
+    Payment,
     Property,
     Provider,
     ServiceAccount,
-    Tariff, Payment,
+    Tariff,
 )
 
 
@@ -412,10 +413,10 @@ class UpdateTariffRateSerializer(serializers.Serializer):
     )
     effective_from = serializers.DateField(label="Дата, з якої діє нова ціна")
 
+
 class PaymentSerializer(serializers.ModelSerializer):
-    account_details = ServiceAccountSerializer(source='account')
+    account_details = ServiceAccountSerializer(source="account")
+
     class Meta:
-        model=Payment
-        fields=('account', 'amount', 'created_at', 'account_details')
-
-
+        model = Payment
+        fields = ("id", "account", "amount", "created_at", "account_details")

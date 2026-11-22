@@ -1,9 +1,9 @@
 from datetime import timedelta
 from decimal import Decimal
-from django_filters import rest_framework as filters
 
 from django.db import transaction
 from django.db.models import Q
+from django_filters import rest_framework as filters
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -22,11 +22,12 @@ from .models import (
     Invoice,
     Meter,
     MeterReading,
+    Payment,
     Property,
     Provider,
     ServiceAccount,
     ServiceAccountRecalculation,
-    Tariff, Payment,
+    Tariff,
 )
 from .serializers import (
     BenefitSerializer,
@@ -35,12 +36,13 @@ from .serializers import (
     InvoiceSerializer,
     MeterReadingSerializer,
     MeterSerializer,
+    PaymentSerializer,
     PropertySerializer,
     ProviderSerializer,
     ServiceAccountSerializer,
     TariffSerializer,
     TopUpSerializer,
-    UpdateTariffRateSerializer, PaymentSerializer,
+    UpdateTariffRateSerializer,
 )
 from .services import BillingService
 
@@ -491,19 +493,29 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 class PaymentFilter(filters.FilterSet):
     property_id = filters.NumberFilter(field_name="account__property_id")
-    account_id = filters.NumberFilter(field_name="account_id")#можна і не вказувати,
+    account_id = filters.NumberFilter(field_name="account_id")  # можна і не вказувати,
+    limit = filters.NumberFilter(method="filter_limit")
 
     class Meta:
         model = Payment
-        fields = ['account_id', 'property_id']
+        fields = ("account_id", "property_id")
+
+    def filter_limit(self, queryset, _, value):
+        if value:
+            # Перетворюємо значення на інт та робимо зріз
+            return queryset[: int(value)]
+        return queryset
 
 
 class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = PaymentSerializer
     filter_backends = (DjangoFilterBackend,)  # вмикаємо фільтр по параметрам в url
-    filterset_class = PaymentFilter  # вказуємо перелік параметрів в url ".../payments/?account_id=1
-    pagination_class = LimitOffsetPagination
+    filterset_class = (
+        PaymentFilter  # вказуємо перелік параметрів в url ".../payments/?account_id=1
+    )
 
-    def get_queryset(self):
-        queryset = Payment.objects.filter(account__property__user=self.request.user)
+    def get_queryset(self):  # type: ignore
+        queryset = Payment.objects.filter(
+            account__property__user=self.request.user
+        ).order_by("-id")
         return queryset
